@@ -4,8 +4,8 @@ const videoSchema = new mongoose.Schema({
   // YouTube Video ID
   youtubeId: {
     type: String,
-    required: true,
-    unique: true
+    unique: true,
+    sparse: true
   },
   
   // Basic Information from YouTube API
@@ -49,6 +49,24 @@ const videoSchema = new mongoose.Schema({
     required: true
   },
   
+  // Caching metadata
+  lastAccessed: {
+    type: Date,
+    default: Date.now
+  },
+  lastUpdated: {
+    type: Date,
+    default: Date.now
+  },
+  category: {
+    type: String,
+    default: 'uncategorized'
+  },
+  sort: {
+    type: String,
+    default: 'date'
+  },
+  
   // User Interaction Data
   watchHistory: [{
     userId: {
@@ -75,6 +93,12 @@ const videoSchema = new mongoose.Schema({
 
 // Index for search functionality
 videoSchema.index({ title: 'text', description: 'text' });
+// Index for YouTube ID lookups
+videoSchema.index({ youtubeId: 1 });
+// Index for category and sort filtering
+videoSchema.index({ category: 1, sort: 1 });
+// Index for last accessed time (for cache management)
+videoSchema.index({ lastAccessed: 1 });
 
 // Method to add to user's watch history
 videoSchema.methods.addToWatchHistory = async function(userId) {

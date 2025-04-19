@@ -104,6 +104,42 @@ export const fetchVideos = createAsyncThunk(
   'videos/fetchVideos',
   async ({ page = 1, category = '', sort = 'date' }: { page?: number; category?: string; sort?: string }, { rejectWithValue }) => {
     try {
+      // First try to get videos from our cache
+      try {
+        const cachedResponse = await api.get('/videos/youtube/cached', {
+          params: { page, category, sort, limit: 10 }
+        });
+        
+        if (cachedResponse.data.videos && cachedResponse.data.videos.length > 0) {
+          // Map cached videos to our format
+          const videos = cachedResponse.data.videos.map((item: any) => ({
+            id: item.youtubeId,
+            title: item.title,
+            description: item.description,
+            thumbnail: item.thumbnailUrl,
+            duration: item.duration,
+            views: item.viewCount,
+            createdAt: item.publishedAt,
+            uploader: {
+              id: item.channelId,
+              displayName: item.channelTitle,
+              avatar: `https://placehold.co/40?text=${item.channelTitle.charAt(0)}`,
+            },
+          }));
+          
+          return {
+            videos,
+            totalPages: cachedResponse.data.totalPages,
+            nextPageToken: null,
+            fromCache: true
+          };
+        }
+      } catch (cacheError) {
+        console.warn('Failed to fetch from cache, falling back to YouTube API:', cacheError);
+        // Continue to YouTube API if cache fails
+      }
+      
+      // If cache is empty or failed, use YouTube API
       const API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
       if (!API_KEY) {
         throw new Error('YouTube API key is not configured');
@@ -146,7 +182,19 @@ export const fetchVideos = createAsyncThunk(
       if (!response.ok) {
         const errorData = await response.json();
         if (response.status === 403) {
-          throw new Error('YouTube API access denied. Please check your API key configuration or quota limits.');
+          // More detailed error message based on the error response
+          const errorMessage = errorData.error?.message || 'Unknown error';
+          const errorReason = errorData.error?.errors?.[0]?.reason || 'unknown';
+          
+          if (errorReason === 'quotaExceeded') {
+            throw new Error('YouTube API quota exceeded. Please try again later.');
+          } else if (errorReason === 'keyInvalid') {
+            throw new Error('Invalid YouTube API key. Please check your configuration.');
+          } else if (errorReason === 'keyExpired') {
+            throw new Error('YouTube API key has expired. Please update your key.');
+          } else {
+            throw new Error(`YouTube API access denied: ${errorMessage}`);
+          }
         }
         throw new Error(errorData.error?.message || 'Failed to fetch videos');
       }
@@ -158,7 +206,7 @@ export const fetchVideos = createAsyncThunk(
         localStorage.setItem('nextPageToken', data.nextPageToken);
       }
 
-      // Map YouTube data to our format
+      // Map YouTube data to our format and cache each video
       const videos = await Promise.all(data.items.map(async (item: any) => {
         try {
           // Get video details including statistics
@@ -172,6 +220,18 @@ export const fetchVideos = createAsyncThunk(
           
           const detailsData = await detailsResponse.json();
           const videoDetails = detailsData.items[0];
+
+          // Cache the video in our database
+          try {
+            await api.post('/videos/youtube/cache', {
+              youtubeId: item.id.videoId,
+              category,
+              sort
+            });
+          } catch (cacheError) {
+            console.warn('Failed to cache video:', cacheError);
+            // Continue even if caching fails
+          }
 
           return {
             id: item.id.videoId,
@@ -200,18 +260,113 @@ export const fetchVideos = createAsyncThunk(
         videos: validVideos,
         totalPages: Math.ceil(data.pageInfo.totalResults / 10),
         nextPageToken: data.nextPageToken,
+        fromCache: false
       };
     } catch (error: any) {
-      toast.error(error.message);
+      // Log the full error for debugging
+      console.error('YouTube API Error:', error);
+      
+      // Show a user-friendly error message
+      toast.error(error.message || 'Failed to fetch videos');
+      
+      // Return fallback data if it's the first page
+      if (page === 1) {
+        return {
+          videos: getFallbackVideos(category),
+          totalPages: 1,
+          nextPageToken: null,
+          fromCache: false
+        };
+      }
+      
       return rejectWithValue(error.message);
     }
   }
 );
 
+// Fallback videos to show when the API fails
+const getFallbackVideos = (category: string): Video[] => {
+  const fallbackVideos: Video[] = [
+    {
+      id: 'fallback1',
+      title: 'Sample Video 1',
+      description: 'This is a sample video description. The YouTube API is currently unavailable.',
+      thumbnail: 'https://placehold.co/640x360?text=Sample+Video+1',
+      duration: '10:30',
+      views: 1234,
+      createdAt: new Date().toISOString(),
+      uploader: {
+        id: 'channel1',
+        displayName: 'Sample Channel',
+        avatar: 'https://placehold.co/40?text=SC',
+      },
+    },
+    {
+      id: 'fallback2',
+      title: 'Sample Video 2',
+      description: 'Another sample video description. Please check your API key configuration.',
+      thumbnail: 'https://placehold.co/640x360?text=Sample+Video+2',
+      duration: '8:45',
+      views: 567,
+      createdAt: new Date().toISOString(),
+      uploader: {
+        id: 'channel2',
+        displayName: 'Demo Channel',
+        avatar: 'https://placehold.co/40?text=DC',
+      },
+    },
+    {
+      id: 'fallback3',
+      title: 'Sample Video 3',
+      description: 'This is a placeholder video. The YouTube API quota may have been exceeded.',
+      thumbnail: 'https://placehold.co/640x360?text=Sample+Video+3',
+      duration: '15:20',
+      views: 890,
+      createdAt: new Date().toISOString(),
+      uploader: {
+        id: 'channel3',
+        displayName: 'Test Channel',
+        avatar: 'https://placehold.co/40?text=TC',
+      },
+    },
+  ];
+  
+  return fallbackVideos;
+};
+
 export const fetchVideoById = createAsyncThunk(
   'videos/fetchVideoById',
   async (id: string) => {
     try {
+      // First try to get video from our cache
+      try {
+        const cachedResponse = await api.get(`/videos/youtube/cached/${id}`);
+        const cachedVideo = cachedResponse.data;
+        
+        if (cachedVideo) {
+          // Map cached video to our format
+          return {
+            id: cachedVideo.youtubeId,
+            title: cachedVideo.title,
+            description: cachedVideo.description,
+            thumbnail: cachedVideo.thumbnailUrl,
+            duration: cachedVideo.duration,
+            views: cachedVideo.viewCount,
+            createdAt: cachedVideo.publishedAt,
+            uploader: {
+              id: cachedVideo.channelId,
+              displayName: cachedVideo.channelTitle,
+              avatar: `https://placehold.co/40?text=${cachedVideo.channelTitle.charAt(0)}`,
+            },
+            fromCache: true
+          };
+        }
+      } catch (cacheError) {
+        console.warn('Failed to fetch from cache, falling back to YouTube API:', cacheError);
+        // Continue to YouTube API if cache fails
+      }
+      
+      // If cache is empty or failed, use YouTube API
       const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
       
       if (!YOUTUBE_API_KEY) {
@@ -235,6 +390,16 @@ export const fetchVideoById = createAsyncThunk(
       
       const video = data.items[0];
       
+      // Cache the video in our database
+      try {
+        await api.post('/videos/youtube/cache', {
+          youtubeId: id
+        });
+      } catch (cacheError) {
+        console.warn('Failed to cache video:', cacheError);
+        // Continue even if caching fails
+      }
+      
       // Map to our app's format
       return {
         id: video.id,
@@ -249,6 +414,7 @@ export const fetchVideoById = createAsyncThunk(
           avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(video.snippet.channelTitle)}&background=random`,
         },
         createdAt: video.snippet.publishedAt,
+        fromCache: false
       };
     } catch (error: any) {
       throw new Error(error.message || 'Failed to fetch video');
@@ -297,6 +463,13 @@ const videoSlice = createSlice({
         state.videos = action.payload.videos;
         state.totalPages = action.payload.totalPages;
         state.currentPage++;
+        
+        // Log cache status
+        if (action.payload.fromCache) {
+          console.log('Videos loaded from cache');
+        } else {
+          console.log('Videos loaded from YouTube API');
+        }
       })
       .addCase(fetchVideos.rejected, (state, action) => {
         state.isLoading = false;
@@ -311,6 +484,13 @@ const videoSlice = createSlice({
       .addCase(fetchVideoById.fulfilled, (state, action) => {
         state.isLoading = false;
         state.currentVideo = action.payload;
+        
+        // Log cache status
+        if (action.payload.fromCache) {
+          console.log('Video loaded from cache');
+        } else {
+          console.log('Video loaded from YouTube API');
+        }
       })
       .addCase(fetchVideoById.rejected, (state, action) => {
         state.isLoading = false;

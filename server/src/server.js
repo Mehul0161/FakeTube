@@ -57,6 +57,17 @@ const connectDB = async () => {
 // Connect to MongoDB
 connectDB();
 
+// Setup video cache cron job if enabled
+if (process.env.ENABLE_VIDEO_CACHE_CRON === 'true') {
+  try {
+    // Import the cron setup script
+    require('./scripts/setupVideoCacheCron');
+    console.log('Video cache cron job setup completed');
+  } catch (error) {
+    console.error('Error setting up video cache cron job:', error);
+  }
+}
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/videos', require('./routes/videos'));

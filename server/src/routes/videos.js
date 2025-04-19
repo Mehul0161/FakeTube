@@ -8,7 +8,11 @@ const {
   getVideoById,
   updateVideo,
   deleteVideo,
-  toggleLike
+  toggleLike,
+  cacheYouTubeVideo,
+  getCachedYouTubeVideos,
+  getCachedYouTubeVideoById,
+  refreshCachedVideo
 } = require('../controllers/videoController');
 
 // Configure multer for file uploads
@@ -35,5 +39,11 @@ router.get('/:id', getVideoById);
 router.patch('/:id', auth, upload.single('thumbnail'), updateVideo);
 router.delete('/:id', auth, deleteVideo);
 router.post('/:id/like', auth, toggleLike);
+
+// YouTube caching routes
+router.post('/youtube/cache', cacheYouTubeVideo);
+router.get('/youtube/cached', getCachedYouTubeVideos);
+router.get('/youtube/cached/:youtubeId', getCachedYouTubeVideoById);
+router.post('/youtube/refresh/:youtubeId', refreshCachedVideo);
 
 module.exports = router; 

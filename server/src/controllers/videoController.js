@@ -1,6 +1,7 @@
 const Video = require('../models/Video');
 const User = require('../models/User');
 const { uploadVideo: uploadVideoToCloud, uploadThumbnail } = require('../config/cloudinary');
+const axios = require('axios');
 
 // Upload video
 const uploadVideo = async (req, res) => {
@@ -201,11 +202,209 @@ const toggleLike = async (req, res) => {
   }
 };
 
+// Cache YouTube video data
+const cacheYouTubeVideo = async (req, res) => {
+  try {
+    const { youtubeId, category, sort } = req.body;
+    
+    if (!youtubeId) {
+      return res.status(400).json({ message: 'YouTube video ID is required' });
+    }
+    
+    // Check if video already exists in our database
+    let video = await Video.findOne({ youtubeId });
+    
+    if (video) {
+      // Update last accessed time
+      video.lastAccessed = new Date();
+      await video.save();
+      return res.json({ message: 'Video already cached', video });
+    }
+    
+    // Fetch video details from YouTube API
+    const API_KEY = process.env.YOUTUBE_API_KEY;
+    if (!API_KEY) {
+      return res.status(500).json({ message: 'YouTube API key is not configured' });
+    }
+    
+    // Fetch video details
+    const videoResponse = await axios.get(
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${youtubeId}&key=${API_KEY}`
+    );
+    
+    if (!videoResponse.data.items || videoResponse.data.items.length === 0) {
+      return res.status(404).json({ message: 'Video not found on YouTube' });
+    }
+    
+    const youtubeData = videoResponse.data.items[0];
+    
+    // Create new video document
+    video = new Video({
+      youtubeId,
+      title: youtubeData.snippet.title,
+      description: youtubeData.snippet.description || 'No description available',
+      thumbnailUrl: youtubeData.snippet.thumbnails.high?.url || youtubeData.snippet.thumbnails.default?.url,
+      duration: youtubeData.contentDetails.duration,
+      channelId: youtubeData.snippet.channelId,
+      channelTitle: youtubeData.snippet.channelTitle,
+      viewCount: parseInt(youtubeData.statistics.viewCount || '0'),
+      publishedAt: youtubeData.snippet.publishedAt,
+      category: category || 'uncategorized',
+      sort: sort || 'date',
+      lastAccessed: new Date(),
+      lastUpdated: new Date()
+    });
+    
+    await video.save();
+    
+    res.status(201).json({ message: 'Video cached successfully', video });
+  } catch (error) {
+    console.error('Error caching YouTube video:', error);
+    res.status(500).json({ message: 'Error caching video', error: error.message });
+  }
+};
+
+// Get cached YouTube videos
+const getCachedYouTubeVideos = async (req, res) => {
+  try {
+    const { category, sort, page = 1, limit = 10 } = req.query;
+    
+    // Build query
+    const query = {};
+    if (category) {
+      query.category = category;
+    }
+    
+    // Determine sort order
+    let sortOption = {};
+    switch (sort) {
+      case 'trending':
+        sortOption = { viewCount: -1 };
+        break;
+      case 'date':
+        sortOption = { publishedAt: -1 };
+        break;
+      case 'rating':
+        sortOption = { viewCount: -1 }; // Approximate rating with view count
+        break;
+      case 'title':
+        sortOption = { title: 1 };
+        break;
+      default:
+        sortOption = { publishedAt: -1 };
+    }
+    
+    // Add lastAccessed to sort to prioritize recently accessed videos
+    sortOption.lastAccessed = -1;
+    
+    // Get videos from cache
+    const videos = await Video.find(query)
+      .sort(sortOption)
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .exec();
+    
+    const total = await Video.countDocuments(query);
+    
+    res.json({
+      videos,
+      totalPages: Math.ceil(total / limit),
+      currentPage: parseInt(page)
+    });
+  } catch (error) {
+    console.error('Error fetching cached videos:', error);
+    res.status(500).json({ message: 'Error fetching cached videos', error: error.message });
+  }
+};
+
+// Get cached YouTube video by ID
+const getCachedYouTubeVideoById = async (req, res) => {
+  try {
+    const { youtubeId } = req.params;
+    
+    if (!youtubeId) {
+      return res.status(400).json({ message: 'YouTube video ID is required' });
+    }
+    
+    // Find video in cache
+    let video = await Video.findOne({ youtubeId });
+    
+    if (!video) {
+      return res.status(404).json({ message: 'Video not found in cache' });
+    }
+    
+    // Update last accessed time
+    video.lastAccessed = new Date();
+    await video.save();
+    
+    res.json(video);
+  } catch (error) {
+    console.error('Error fetching cached video:', error);
+    res.status(500).json({ message: 'Error fetching cached video', error: error.message });
+  }
+};
+
+// Refresh cached video data
+const refreshCachedVideo = async (req, res) => {
+  try {
+    const { youtubeId } = req.params;
+    
+    if (!youtubeId) {
+      return res.status(400).json({ message: 'YouTube video ID is required' });
+    }
+    
+    // Find video in cache
+    let video = await Video.findOne({ youtubeId });
+    
+    if (!video) {
+      return res.status(404).json({ message: 'Video not found in cache' });
+    }
+    
+    // Fetch updated data from YouTube API
+    const API_KEY = process.env.YOUTUBE_API_KEY;
+    if (!API_KEY) {
+      return res.status(500).json({ message: 'YouTube API key is not configured' });
+    }
+    
+    const videoResponse = await axios.get(
+      `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${youtubeId}&key=${API_KEY}`
+    );
+    
+    if (!videoResponse.data.items || videoResponse.data.items.length === 0) {
+      return res.status(404).json({ message: 'Video not found on YouTube' });
+    }
+    
+    const youtubeData = videoResponse.data.items[0];
+    
+    // Update video document
+    video.title = youtubeData.snippet.title;
+    video.description = youtubeData.snippet.description;
+    video.thumbnailUrl = youtubeData.snippet.thumbnails.high?.url || youtubeData.snippet.thumbnails.default?.url;
+    video.duration = youtubeData.contentDetails.duration;
+    video.channelId = youtubeData.snippet.channelId;
+    video.channelTitle = youtubeData.snippet.channelTitle;
+    video.viewCount = parseInt(youtubeData.statistics.viewCount || '0');
+    video.publishedAt = youtubeData.snippet.publishedAt;
+    video.lastUpdated = new Date();
+    
+    await video.save();
+    
+    res.json({ message: 'Video data refreshed successfully', video });
+  } catch (error) {
+    console.error('Error refreshing cached video:', error);
+    res.status(500).json({ message: 'Error refreshing cached video', error: error.message });
+  }
+};
+
 module.exports = {
   uploadVideo,
   getAllVideos,
   getVideoById,
   updateVideo,
   deleteVideo,
-  toggleLike
+  toggleLike,
+  cacheYouTubeVideo,
+  getCachedYouTubeVideos,
+  getCachedYouTubeVideoById,
+  refreshCachedVideo
 }; 
