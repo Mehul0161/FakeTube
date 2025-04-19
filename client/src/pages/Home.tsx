@@ -73,7 +73,9 @@ function Home() {
             className="px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-500"
           >
             <option value="date">Latest</option>
-            <option value="trending">Trending</option>
+            <option value="viewCount">Trending</option>
+            <option value="rating">Top Rated</option>
+            <option value="title">Alphabetical</option>
           </select>
         </div>
       </div>
@@ -87,11 +89,13 @@ function Home() {
           <div className="text-red-600">{error}</div>
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {videos.map((video) => (
-              <VideoCard key={video.id} video={video} />
-            ))}
+        <div className="flex flex-col">
+          <div className="overflow-y-auto max-h-[calc(100vh-250px)]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {videos.map((video) => (
+                <VideoCard key={video.id} video={video} />
+              ))}
+            </div>
           </div>
 
           {currentPage < totalPages && (
@@ -112,7 +116,7 @@ function Home() {
               </button>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

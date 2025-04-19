@@ -1,44 +1,37 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useLocation, useOutletContext } from 'react-router-dom';
+import { useSearchParams, useOutletContext } from 'react-router-dom';
 import { AppDispatch, RootState } from '../store';
 import { fetchVideos } from '../features/videos/videoSlice';
 import VideoCard from '../components/VideoCard';
 import { toast } from 'react-hot-toast';
 
-const Search: React.FC = () => {
+function Search() {
   const dispatch = useDispatch<AppDispatch>();
-  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const searchTerm = searchParams.get('q') || '';
   const { videos, isLoading, error, totalPages, currentPage } = useSelector(
     (state: RootState) => state.videos
   );
-  const [searchTerm, setSearchTerm] = useState('');
+  const [sort, setSort] = useState<string>('relevance');
   const [apiError, setApiError] = useState<string | null>(null);
-  
-  // Get category from context with a default empty string if context is null
-  const context = useOutletContext<{ 
-    currentCategory: string; 
-    setCurrentCategory: (category: string) => void 
-  }>();
+
+  // Get setCurrentCategory from context with a default empty function if context is null
+  const context = useOutletContext<{ setCurrentCategory: (category: string) => void }>();
   const setCurrentCategory = context?.setCurrentCategory || (() => {});
 
   useEffect(() => {
-    // Get search term from URL query parameter
-    const params = new URLSearchParams(location.search);
-    const query = params.get('q');
-    
-    if (query) {
-      setSearchTerm(query);
-      
-      // Update the category in the context to match the search term
-      setCurrentCategory(query);
-      
-      // Fetch videos based on search term
-      dispatch(fetchVideos({ 
-        page: 1, 
-        category: query,
-        sort: 'relevance'
-      }))
+    // Check if YouTube API key is configured
+    const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY;
+    if (!YOUTUBE_API_KEY) {
+      setApiError('YouTube API key is not configured. Please check your .env file.');
+      toast.error('YouTube API key is not configured');
+      return;
+    }
+
+    if (searchTerm) {
+      setCurrentCategory(searchTerm);
+      dispatch(fetchVideos({ page: 1, category: searchTerm, sort }))
         .unwrap()
         .catch((error) => {
           console.error('Error fetching search results:', error);
@@ -46,29 +39,37 @@ const Search: React.FC = () => {
           toast.error(error.message || 'Failed to load search results');
         });
     }
-  }, [dispatch, location.search, setCurrentCategory]);
+  }, [dispatch, searchTerm, sort, setCurrentCategory]);
 
   const handleLoadMore = () => {
     if (currentPage < totalPages) {
-      dispatch(fetchVideos({ 
-        page: currentPage + 1, 
-        category: searchTerm,
-        sort: 'relevance'
-      }))
+      dispatch(fetchVideos({ page: currentPage + 1, category: searchTerm, sort }))
         .unwrap()
         .catch((error) => {
-          console.error('Error loading more results:', error);
-          toast.error(error.message || 'Failed to load more results');
+          toast.error(error.message || 'Failed to load more videos');
         });
     }
   };
 
   return (
     <div className="max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">
-        Search Results for "{searchTerm}"
-      </h1>
-      
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold mb-4">Search Results for "{searchTerm}"</h1>
+        <div className="flex justify-end">
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            className="px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-500"
+          >
+            <option value="relevance">Most Relevant</option>
+            <option value="date">Latest</option>
+            <option value="viewCount">Trending</option>
+            <option value="rating">Top Rated</option>
+            <option value="title">Alphabetical</option>
+          </select>
+        </div>
+      </div>
+
       {isLoading && videos.length === 0 ? (
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-600"></div>
@@ -82,11 +83,13 @@ const Search: React.FC = () => {
           <div className="text-gray-600">No videos found for "{searchTerm}"</div>
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {videos.map((video) => (
-              <VideoCard key={video.id} video={video} />
-            ))}
+        <div className="flex flex-col">
+          <div className="overflow-y-auto max-h-[calc(100vh-250px)]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {videos.map((video) => (
+                <VideoCard key={video.id} video={video} />
+              ))}
+            </div>
           </div>
 
           {currentPage < totalPages && (
@@ -107,10 +110,10 @@ const Search: React.FC = () => {
               </button>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
-};
+}
 
 export default Search; 

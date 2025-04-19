@@ -109,13 +109,27 @@ export const fetchVideos = createAsyncThunk(
         throw new Error('YouTube API key is not configured');
       }
 
+      // Map our sort parameter to YouTube API valid order parameters
+      let orderParam = 'date'; // Default to date
+      if (sort === 'trending') {
+        orderParam = 'viewCount'; // Use viewCount for trending videos
+      } else if (sort === 'date') {
+        orderParam = 'date';
+      } else if (sort === 'relevance') {
+        orderParam = 'relevance';
+      } else if (sort === 'rating') {
+        orderParam = 'rating';
+      } else if (sort === 'title') {
+        orderParam = 'title';
+      }
+
       // Build search parameters
       const searchParams = new URLSearchParams({
         part: 'snippet',
         q: category || 'music', // Default to 'music' if category is empty
         type: 'video',
         maxResults: '10',
-        order: sort,
+        order: orderParam,
         key: API_KEY,
       });
 
