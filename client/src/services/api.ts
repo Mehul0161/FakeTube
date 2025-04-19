@@ -28,4 +28,26 @@ api.interceptors.response.use(
   }
 );
 
+// Register user in MongoDB after Firebase authentication
+export const registerUserInMongoDB = async (userData: {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+}) => {
+  try {
+    // Ensure we have valid data to send
+    const response = await api.post('/auth/register-mongo', {
+      firebaseUid: userData.uid,
+      email: userData.email || '',
+      displayName: userData.displayName || (userData.email ? userData.email.split('@')[0] : 'User'),
+      avatar: userData.photoURL || ''
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error registering user in MongoDB:', error);
+    throw error;
+  }
+};
+
 export default api; 

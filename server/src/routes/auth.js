@@ -6,7 +6,8 @@ const {
   register,
   login,
   getCurrentUser,
-  updateProfile
+  updateProfile,
+  registerMongoUser
 } = require('../controllers/authController');
 
 // Configure multer for file uploads
@@ -23,6 +24,7 @@ const upload = multer({ storage: storage });
 
 // Auth routes
 router.post('/register', upload.single('avatar'), register);
+router.post('/register-mongo', registerMongoUser);
 router.post('/login', login);
 router.get('/me', auth, getCurrentUser);
 router.patch('/profile', auth, upload.single('avatar'), updateProfile);

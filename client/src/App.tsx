@@ -6,7 +6,7 @@ import { useDispatch } from 'react-redux';
 import { checkAuthState } from './features/auth/authSlice';
 import { Toaster } from 'react-hot-toast';
 import ProtectedRoute from './components/auth/ProtectedRoute';
-import Navbar from './components/layout/Navbar';
+import Layout from './components/layout/Layout';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -28,62 +28,26 @@ const AppContent = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <Toaster position="top-right" />
-      {!isAuthPage && <Navbar />}
-      <main className={`container mx-auto px-4 py-8 ${isAuthPage ? 'min-h-screen flex items-center justify-center' : ''}`}>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Home />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/video/:id"
-            element={
-              <ProtectedRoute>
-                <VideoPlayer />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/upload"
-            element={
-              <ProtectedRoute>
-                <Upload />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile/:id"
-            element={
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/settings"
-            element={
-              <ProtectedRoute>
-                <Settings />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/search"
-            element={
-              <ProtectedRoute>
-                <Search />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Home />} />
+          <Route path="video/:id" element={<VideoPlayer />} />
+          <Route path="upload" element={<Upload />} />
+          <Route path="profile/:id" element={<Profile />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="search" element={<Search />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </div>
   );
 };

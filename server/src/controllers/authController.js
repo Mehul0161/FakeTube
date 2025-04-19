@@ -124,9 +124,48 @@ const updateProfile = async (req, res) => {
   }
 };
 
+// Register user in MongoDB after Firebase authentication
+const registerMongoUser = async (req, res) => {
+  try {
+    const { firebaseUid, email, displayName, avatar } = req.body;
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(200).json({ message: 'User already exists in MongoDB' });
+    }
+    
+    // Create new user in MongoDB with fallback for displayName
+    const user = new User({
+      email,
+      displayName: displayName || (email ? email.split('@')[0] : 'User'),
+      avatar: avatar || '',
+      // Generate a random password since we're using Firebase for auth
+      password: Math.random().toString(36).slice(-8)
+    });
+    
+    await user.save();
+    console.log(`User registered in MongoDB: ${email}`);
+    
+    res.status(201).json({
+      message: 'User registered in MongoDB successfully',
+      user: {
+        id: user._id,
+        email: user.email,
+        displayName: user.displayName,
+        avatar: user.avatar
+      }
+    });
+  } catch (error) {
+    console.error('Error registering user in MongoDB:', error);
+    res.status(500).json({ message: 'Error creating user in MongoDB', error: error.message });
+  }
+};
+
 module.exports = {
   register,
   login,
   getCurrentUser,
-  updateProfile
+  updateProfile,
+  registerMongoUser
 }; 

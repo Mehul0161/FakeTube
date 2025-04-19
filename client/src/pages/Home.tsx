@@ -4,7 +4,7 @@ import { AppDispatch, RootState } from '../store';
 import { fetchVideos } from '../features/videos/videoSlice';
 import VideoCard from '../components/VideoCard';
 import { toast } from 'react-hot-toast';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useOutletContext } from 'react-router-dom';
 
 function Home() {
   const dispatch = useDispatch<AppDispatch>();
@@ -12,9 +12,12 @@ function Home() {
   const { videos, isLoading, error, totalPages, currentPage } = useSelector(
     (state: RootState) => state.videos
   );
-  const [category, setCategory] = useState<string>('');
   const [sort, setSort] = useState<string>('date');
   const [apiError, setApiError] = useState<string | null>(null);
+  
+  // Get category from context with a default empty string if context is null
+  const context = useOutletContext<{ currentCategory: string; setCurrentCategory: (category: string) => void }>();
+  const currentCategory = context?.currentCategory || '';
 
   useEffect(() => {
     // Check if YouTube API key is configured
@@ -31,7 +34,6 @@ function Home() {
     
     if (searchQuery) {
       // If we have a search query, use it as the category
-      setCategory(searchQuery);
       dispatch(fetchVideos({ page: 1, category: searchQuery, sort: 'relevance' }))
         .unwrap()
         .catch((error) => {
@@ -41,7 +43,7 @@ function Home() {
         });
     } else {
       // Otherwise, fetch videos based on the selected category
-      dispatch(fetchVideos({ page: 1, category, sort }))
+      dispatch(fetchVideos({ page: 1, category: currentCategory, sort }))
         .unwrap()
         .catch((error) => {
           console.error('Error fetching videos:', error);
@@ -49,11 +51,11 @@ function Home() {
           toast.error(error.message || 'Failed to load videos');
         });
     }
-  }, [dispatch, category, sort, location.search]);
+  }, [dispatch, currentCategory, sort, location.search]);
 
   const handleLoadMore = () => {
     if (currentPage < totalPages) {
-      dispatch(fetchVideos({ page: currentPage + 1, category, sort }))
+      dispatch(fetchVideos({ page: currentPage + 1, category: currentCategory, sort }))
         .unwrap()
         .catch((error) => {
           toast.error(error.message || 'Failed to load more videos');
@@ -61,36 +63,9 @@ function Home() {
     }
   };
 
-  const categories = [
-    'All',
-    'Music',
-    'Gaming',
-    'News',
-    'Sports',
-    'Technology',
-    'Education',
-    'Entertainment',
-  ];
-
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto">
       <div className="mb-8">
-        <div className="flex flex-wrap gap-2 mb-4">
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategory(cat === 'All' ? '' : cat)}
-              className={`px-4 py-2 rounded-full text-sm font-medium ${
-                category === (cat === 'All' ? '' : cat)
-                  ? 'bg-red-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-
         <div className="flex justify-end">
           <select
             value={sort}

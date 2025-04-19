@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useOutletContext } from 'react-router-dom';
 import { AppDispatch, RootState } from '../store';
 import { fetchVideos } from '../features/videos/videoSlice';
 import VideoCard from '../components/VideoCard';
@@ -14,6 +14,13 @@ const Search: React.FC = () => {
   );
   const [searchTerm, setSearchTerm] = useState('');
   const [apiError, setApiError] = useState<string | null>(null);
+  
+  // Get category from context with a default empty string if context is null
+  const context = useOutletContext<{ 
+    currentCategory: string; 
+    setCurrentCategory: (category: string) => void 
+  }>();
+  const setCurrentCategory = context?.setCurrentCategory || (() => {});
 
   useEffect(() => {
     // Get search term from URL query parameter
@@ -22,6 +29,9 @@ const Search: React.FC = () => {
     
     if (query) {
       setSearchTerm(query);
+      
+      // Update the category in the context to match the search term
+      setCurrentCategory(query);
       
       // Fetch videos based on search term
       dispatch(fetchVideos({ 
@@ -36,7 +46,7 @@ const Search: React.FC = () => {
           toast.error(error.message || 'Failed to load search results');
         });
     }
-  }, [dispatch, location.search]);
+  }, [dispatch, location.search, setCurrentCategory]);
 
   const handleLoadMore = () => {
     if (currentPage < totalPages) {
@@ -54,7 +64,7 @@ const Search: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">
         Search Results for "{searchTerm}"
       </h1>

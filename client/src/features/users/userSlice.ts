@@ -91,6 +91,24 @@ export const addToPlaylist = createAsyncThunk(
   }
 );
 
+export const updateUserProfile = createAsyncThunk(
+  'users/updateUserProfile',
+  async (userData: { displayName?: string; bio?: string; avatar?: File }) => {
+    const formData = new FormData();
+    
+    if (userData.displayName) formData.append('displayName', userData.displayName);
+    if (userData.bio) formData.append('bio', userData.bio);
+    if (userData.avatar) formData.append('avatar', userData.avatar);
+    
+    const response = await api.patch('/users/me', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  }
+);
+
 const userSlice = createSlice({
   name: 'users',
   initialState,
@@ -166,6 +184,24 @@ const userSlice = createSlice({
             playlist.videos.push(action.meta.arg.videoId);
           }
         }
+      })
+      // Update User Profile
+      .addCase(updateUserProfile.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(updateUserProfile.fulfilled, (state, action) => {
+        state.isLoading = false;
+        if (state.currentUser) {
+          state.currentUser = {
+            ...state.currentUser,
+            ...action.payload
+          };
+        }
+      })
+      .addCase(updateUserProfile.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.error.message || 'Failed to update profile';
       });
   },
 });

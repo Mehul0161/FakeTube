@@ -4,7 +4,14 @@ const Video = require('../models/Video');
 // Get user profile
 const getUserProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
+    const { id } = req.params;
+    
+    // Check if ID is valid
+    if (!id || id === 'undefined') {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+    
+    const user = await User.findById(id)
       .select('-password')
       .populate('videos', 'title thumbnailUrl views createdAt');
 
@@ -21,7 +28,14 @@ const getUserProfile = async (req, res) => {
 // Subscribe/Unsubscribe to user
 const toggleSubscription = async (req, res) => {
   try {
-    const targetUser = await User.findById(req.params.id);
+    const { id } = req.params;
+    
+    // Check if ID is valid
+    if (!id || id === 'undefined') {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+    
+    const targetUser = await User.findById(id);
     if (!targetUser) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -172,6 +186,33 @@ const removeFromPlaylist = async (req, res) => {
   }
 };
 
+// Update user profile
+const updateUserProfile = async (req, res) => {
+  try {
+    const { displayName, bio } = req.body;
+    const updates = {};
+
+    if (displayName) updates.displayName = displayName;
+    if (bio) updates.bio = bio;
+
+    // Upload new avatar if provided
+    if (req.file) {
+      const avatarUrl = await uploadAvatar(req.file.path);
+      updates.avatar = avatarUrl;
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      updates,
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating profile', error: error.message });
+  }
+};
+
 module.exports = {
   getUserProfile,
   toggleSubscription,
@@ -180,5 +221,6 @@ module.exports = {
   getPlaylists,
   createPlaylist,
   addToPlaylist,
-  removeFromPlaylist
+  removeFromPlaylist,
+  updateUserProfile
 }; 
